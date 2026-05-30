@@ -8,57 +8,58 @@ const app = express();
 // ==========================================
 // MIDDLEWARE
 // ==========================================
-// Allows your React frontend (usually port 5173 or 3000) to talk to this backend
-// Strict CORS configuration
 const corsOptions = {
-  origin: 'https://smartquiz-frontend.vercel.app', // Only allow this exact website
+  origin: 'https://smartquiz-frontend.vercel.app', 
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  credentials: true, // Allow session cookies if you use them later
+  credentials: true,
   optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
-
-
-// Allows Express to understand JSON data sent in requests
 app.use(express.json()); 
-
-// Allows Express to understand URL-encoded data
 app.use(express.urlencoded({ extended: true }));
 
 // ==========================================
-// DATABASE CONNECTION
+// DATABASE CONNECTION (Vercel-Optimized)
 // ==========================================
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ Securely connected to MongoDB!'))
-  .catch((err) => {
-    console.error('❌ MongoDB connection error:');
-    console.error(err);
-  });
+const connectDB = async () => {
+  try {
+    // Check if already connected to prevent multiple connection attempts
+    if (mongoose.connection.readyState >= 1) return;
+
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 10s
+      socketTimeoutMS: 45000,
+    });
+    console.log('✅ Securely connected to MongoDB!');
+  } catch (err) {
+    console.error('❌ MongoDB connection error:', err.message);
+  }
+};
+
+// Call the connection
+connectDB();
 
 // ==========================================
 // API ROUTES
 // ==========================================
-// Authentication & User Profiles
 app.use('/api/auth', require('./routes/auth'));
-
-// Student/Teacher Class Enrollments
 app.use('/api/enrollments', require('./routes/enrollments'));
-
-// AI Quiz Generation (Ensure your AI file is named ai.js)
 app.use('/api/ai', require('./routes/ai'));
-
-// Saving & Fetching Quizzes (Pointed exactly to your 'quiz.js' file!)
 app.use('/api/quizzes', require('./routes/quiz'));
-
-// Add this line so the server knows how to handle the grades!
 app.use('/api/scores', require('./routes/score'));
+
 // ==========================================
 // SERVER INITIALIZATION
 // ==========================================
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-});
+// Vercel serverless functions handle the listening automatically,
+// but keeping this for local development:
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Backend running on http://localhost:${PORT}`);
+  });
+}
+
 module.exports = app;
