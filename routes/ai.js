@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const pdfParse = require('pdf-parse');
+
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const router = express.Router();
