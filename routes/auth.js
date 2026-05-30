@@ -25,6 +25,11 @@ router.post('/register', upload.single('profilePic'), async (req, res) => {
       subjects, qualifications, teacherId, grade, schoolName, parentContact 
     } = req.body;
 
+    // Validate required fields
+    if (!username || !password || !role) {
+      return res.status(400).json({ message: 'Username, password, and role are required' });
+    }
+
     const existingUser = await User.findOne({ username });
     if (existingUser) return res.status(400).json({ message: 'Username already taken' });
 
@@ -56,8 +61,12 @@ router.post('/register', upload.single('profilePic'), async (req, res) => {
     res.status(201).json({ message: 'Registration successful!', user: { id: newUser._id, role: newUser.role } });
 
   } catch (error) {
-    console.error('Registration Error:', error);
-    res.status(500).json({ message: 'Server error during registration' });
+    console.error('Registration Error Details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    res.status(500).json({ message: 'Server error during registration', error: error.message });
   }
 });
 
@@ -66,13 +75,21 @@ router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    const user = await User.findOne({ username });
-    if (!user) return res.status(400).json({ message: 'Invalid username or password' });
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
+
+    const user = await User.findOne({ username }).lean();
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid username or password' });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Invalid username or password' });
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid username or password' });
+    }
 
-    res.status(200).json({ 
+    return res.status(200).json({ 
       message: 'Login successful', 
       user: { 
         id: user._id, 
@@ -82,26 +99,42 @@ router.post('/login', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Login Error:', error);
-    res.status(500).json({ message: 'Server error during login' });
+    console.error('Login Error Details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    res.status(500).json({ message: 'Server error during login', error: error.message });
   }
 });
 // 3. Update User Profile
 router.put('/profile/:id', async (req, res) => {
   try {
+    if (!req.params.id) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
     const { fullName, subjects, district, qualifications } = req.body;
     
     // Find the user by ID and update their fields
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
       { fullName, subjects, district, qualifications },
-      { new: true } // This returns the updated document
+      { new: true, runValidators: true }
     );
+    
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
     
     res.status(200).json({ message: 'Profile updated successfully!', user: updatedUser });
   } catch (error) {
-    console.error('Profile Update Error:', error);
-    res.status(500).json({ message: 'Failed to update profile' });
+    console.error('Profile Update Error Details:', {
+      message: error.message,
+      stack: error.stack,
+      userId: req.params.id
+    });
+    res.status(500).json({ message: 'Failed to update profile', error: error.message });
   }
 });
 

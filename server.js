@@ -25,20 +25,34 @@ app.use(express.urlencoded({ extended: true }));
 const connectDB = async () => {
   try {
     // Check if already connected to prevent multiple connection attempts
-    if (mongoose.connection.readyState >= 1) return;
+    if (mongoose.connection.readyState >= 1) {
+      console.log('✅ Already connected to MongoDB!');
+      return;
+    }
 
     await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 10s
+      serverSelectionTimeoutMS: 10000, // Timeout after 10s
       socketTimeoutMS: 45000,
     });
     console.log('✅ Securely connected to MongoDB!');
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
+    // Continue running even if DB fails initially - useful for serverless
   }
 };
 
 // Call the connection
 connectDB();
+
+// Health check endpoint to verify server is working
+app.get('/health', (req, res) => {
+  const dbStatus = mongoose.connection.readyState >= 1 ? 'connected' : 'disconnected';
+  res.status(200).json({ 
+    status: 'ok', 
+    database: dbStatus,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // ==========================================
 // API ROUTES
@@ -48,6 +62,20 @@ app.use('/api/enrollments', require('./routes/enrollments'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/quizzes', require('./routes/quiz'));
 app.use('/api/scores', require('./routes/score'));
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled Error:', {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method
+  });
+  res.status(500).json({ 
+    message: 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
 
 // ==========================================
 // SERVER INITIALIZATION
