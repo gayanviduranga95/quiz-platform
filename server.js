@@ -30,19 +30,49 @@ const connectDB = async () => {
       return;
     }
 
-    await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 10000, // Timeout after 10s
+    const mongoUri = process.env.MONGO_URI;
+    if (!mongoUri) {
+      throw new Error('MONGO_URI environment variable is not set');
+    }
+
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 15000,
       socketTimeoutMS: 45000,
+      retryWrites: true,
+      retryReads: true,
+      maxPoolSize: 10,
+      minPoolSize: 2,
     });
     console.log('✅ Securely connected to MongoDB!');
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
-    // Continue running even if DB fails initially - useful for serverless
+    console.error('💡 Fix this by adding your IP to MongoDB Atlas whitelist:');
+    console.error('   1. Go to: https://www.mongodb.com/docs/atlas/security-whitelist/');
+    console.error('   2. Allow access from 0.0.0.0/0 for development (less secure)');
+    console.error('   3. Or add your specific IP/Vercel IPs for production');
+    console.error('   4. Verify MONGO_URI in .env is correct');
+    // Don't exit - allow server to continue for health checks
   }
 };
 
-// Call the connection
-connectDB();
+// Call the connection with retry logic
+const connectWithRetry = async () => {
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      await connectDB();
+      break;
+    } catch (err) {
+      retries--;
+      if (retries > 0) {
+        console.log(`Retrying connection... (${retries} attempts left)`);
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+  }
+};
+
+connectWithRetry();
 
 // Health check endpoint to verify server is working
 app.get('/health', (req, res) => {
@@ -50,7 +80,8 @@ app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'ok', 
     database: dbStatus,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    message: dbStatus === 'disconnected' ? 'Database not connected - check MongoDB Atlas IP whitelist' : 'All systems operational'
   });
 });
 
