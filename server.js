@@ -5,6 +5,18 @@ require('dotenv').config();
 
 const app = express();
 
+// Debug: Show environment variables
+console.log('🔍 Environment Variables Check:');
+console.log('   NODE_ENV:', process.env.NODE_ENV);
+console.log('   MONGO_URI set:', !!process.env.MONGO_URI);
+if (process.env.MONGO_URI) {
+  const uri = process.env.MONGO_URI;
+  const maskedUri = uri.replace(/:[^:]*@/, ':****@'); // Hide password
+  console.log('   MONGO_URI:', maskedUri);
+}
+console.log('   PORT:', process.env.PORT || 5000);
+console.log('');
+
 // ==========================================
 // MIDDLEWARE
 // ==========================================
@@ -35,6 +47,7 @@ const connectDB = async () => {
       throw new Error('MONGO_URI environment variable is not set');
     }
 
+    console.log('⏳ Connecting to MongoDB...');
     await mongoose.connect(mongoUri, {
       serverSelectionTimeoutMS: 15000,
       socketTimeoutMS: 45000,
@@ -46,12 +59,23 @@ const connectDB = async () => {
     console.log('✅ Securely connected to MongoDB!');
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
-    console.error('💡 Fix this by adding your IP to MongoDB Atlas whitelist:');
-    console.error('   1. Go to: https://www.mongodb.com/docs/atlas/security-whitelist/');
-    console.error('   2. Allow access from 0.0.0.0/0 for development (less secure)');
-    console.error('   3. Or add your specific IP/Vercel IPs for production');
-    console.error('   4. Verify MONGO_URI in .env is correct');
-    // Don't exit - allow server to continue for health checks
+    
+    // Provide specific guidance based on error
+    if (err.message.includes('getaddrinfo') || err.message.includes('ENOTFOUND')) {
+      console.error('💡 Network error - check internet connection');
+    } else if (err.message.includes('could not connect') || err.message.includes('IP')) {
+      console.error('💡 IP Whitelist Issue:');
+      console.error('   1. Go to: https://cloud.mongodb.com/');
+      console.error('   2. Click: Network Access → Add IP Address');
+      console.error('   3. Enter: 0.0.0.0/0 (for development)');
+      console.error('   4. Wait 1-2 minutes and restart server');
+    } else if (err.message.includes('authentication')) {
+      console.error('💡 Authentication Error - check MONGO_URI credentials in .env');
+    } else if (err.message.includes('MONGO_URI')) {
+      console.error('💡 MONGO_URI not set - make sure .env file exists and has MONGO_URI=...');
+    }
+    
+    console.error('⚠️  Retrying connection...\n');
   }
 };
 

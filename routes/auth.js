@@ -99,12 +99,32 @@ router.post('/login', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Login Error Details:', {
+    console.error('❌ Login Error Details:', {
       message: error.message,
-      stack: error.stack,
-      name: error.name
+      code: error.code,
+      name: error.name,
+      stack: error.stack
     });
-    res.status(500).json({ message: 'Server error during login', error: error.message });
+    
+    // Determine error type
+    let statusCode = 500;
+    let errorMessage = 'Server error during login';
+    
+    if (error.name === 'MongoNetworkError' || error.message.includes('connect')) {
+      statusCode = 503;
+      errorMessage = 'Database connection failed - IP whitelist may need update';
+    } else if (error.name === 'MongoAuthenticationError') {
+      statusCode = 500;
+      errorMessage = 'Database authentication failed - check MONGO_URI credentials';
+    } else if (error.name === 'MongoParseError') {
+      statusCode = 500;
+      errorMessage = 'Invalid database URI - check MONGO_URI in .env';
+    }
+    
+    res.status(statusCode).json({ 
+      message: errorMessage,
+      debug: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 // 3. Update User Profile
