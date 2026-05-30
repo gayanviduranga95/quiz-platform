@@ -127,19 +127,26 @@ router.post('/login', async (req, res) => {
     });
   }
 });
-// 3. Update User Profile
-router.put('/profile/:id', async (req, res) => {
+// 3. Update User Profile (with optional profile picture upload)
+router.put('/profile/:id', upload.single('profilePic'), async (req, res) => {
   try {
     if (!req.params.id) {
       return res.status(400).json({ message: 'User ID is required' });
     }
 
     const { fullName, subjects, district, qualifications } = req.body;
+    const updateData = { fullName, subjects, district, qualifications };
+    
+    // Handle profile picture upload if provided
+    if (req.file) {
+      const profilePicBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      updateData.profilePic = profilePicBase64;
+    }
     
     // Find the user by ID and update their fields
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
-      { fullName, subjects, district, qualifications },
+      updateData,
       { new: true, runValidators: true }
     );
     
@@ -155,6 +162,30 @@ router.put('/profile/:id', async (req, res) => {
       userId: req.params.id
     });
     res.status(500).json({ message: 'Failed to update profile', error: error.message });
+  }
+});
+
+// 4. Get User Profile
+router.get('/profile/:id', async (req, res) => {
+  try {
+    if (!req.params.id) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    const user = await User.findById(req.params.id).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.status(200).json({ message: 'Profile fetched successfully', user });
+  } catch (error) {
+    console.error('Profile Fetch Error Details:', {
+      message: error.message,
+      stack: error.stack,
+      userId: req.params.id
+    });
+    res.status(500).json({ message: 'Failed to fetch profile', error: error.message });
   }
 });
 
