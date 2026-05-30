@@ -10,7 +10,7 @@ const app = express();
 // ==========================================
 // Allows your React frontend (usually port 5173 or 3000) to talk to this backend
 app.use(cors()); 
-app.use('/api/admin', require('./routes/admin'));
+
 
 // Allows Express to understand JSON data sent in requests
 app.use(express.json()); 
