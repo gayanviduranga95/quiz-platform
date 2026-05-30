@@ -1,9 +1,9 @@
 const express = require('express');
 const multer = require('multer');
-
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const router = express.Router();
+// Save the file in temporary memory, avoiding Vercel's read-only hard drive
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Initialize Gemini (Ensure your .env file has GEMINI_API_KEY)
@@ -16,17 +16,22 @@ router.post('/generate', upload.single('pdf'), async (req, res) => {
     // Grab requested question count or default to 5
     const numQuestions = req.body.numQuestions || 5;
     
-    const pdfData = await pdfParse(req.file.buffer);
-    const text = pdfData.text;
+    // Convert the uploaded PDF buffer directly into a format Gemini can read
+    const pdfPart = {
+      inlineData: {
+        data: req.file.buffer.toString("base64"),
+        mimeType: "application/pdf"
+      }
+    };
 
-    const prompt = `You are an expert teacher. Based on the following text, generate exactly ${numQuestions} multiple-choice questions. 
-    Return ONLY a JSON array of objects with the exact keys: "questionText", "options" (array of 4 strings), and "correctAnswer" (must match one option exactly).
-    
-    Text: ${text}`;
+    const promptText = `You are an expert teacher. Based on the attached PDF document, generate exactly ${numQuestions} multiple-choice questions. 
+    Return ONLY a JSON array of objects with the exact keys: "questionText", "options" (array of 4 strings), and "correctAnswer" (must match one option exactly).`;
 
-    // Using standard Gemini 1.5 Flash or Pro
+    // Using Gemini 2.5 Flash
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent(prompt);
+    
+    // Send BOTH the text prompt and the PDF file directly to Gemini
+    const result = await model.generateContent([promptText, pdfPart]);
     let responseText = result.response.text();
     
     // Clean formatting if Gemini wraps in markdown
