@@ -30,7 +30,7 @@ router.post('/register', upload.single('profilePic'), async (req, res) => {
       return res.status(400).json({ message: 'Username, password, and role are required' });
     }
 
-    const existingUser = await User.findOne({ username });
+    const existingUser = await User.findOne({ username }).maxTimeMS(30000);
     if (existingUser) return res.status(400).json({ message: 'Username already taken' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
