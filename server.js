@@ -11,7 +11,7 @@ const app = express();
 // Allows your React frontend (usually port 5173 or 3000) to talk to this backend
 // Strict CORS configuration
 const corsOptions = {
-  origin: 'https://smartquiz-frontend.vercel.app/', // Only allow this exact website
+  origin: 'https://smartquiz-frontend.vercel.app', // Only allow this exact website
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true, // Allow session cookies if you use them later
   optionsSuccessStatus: 200
