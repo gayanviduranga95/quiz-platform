@@ -79,6 +79,7 @@ const connectDB = async () => {
     }
     
     console.error('⚠️  Retrying connection...\n');
+    throw err;
   }
 };
 
@@ -99,7 +100,9 @@ const connectWithRetry = async () => {
   }
 };
 
-connectWithRetry();
+connectWithRetry().catch((error) => {
+  console.error('MongoDB startup connection failed:', error.message);
+});
 
 // Health check endpoint to verify server is working
 app.get('/health', (req, res) => {
@@ -115,6 +118,17 @@ app.get('/health', (req, res) => {
 // ==========================================
 // API ROUTES
 // ==========================================
+app.use('/api', async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    res.status(503).json({
+      message: 'Database is temporarily unavailable. Please try again.'
+    });
+  }
+});
+
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/enrollments', require('./routes/enrollments'));
 app.use('/api/ai', require('./routes/ai'));
