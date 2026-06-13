@@ -12,7 +12,11 @@ router.post('/request', async (req, res) => {
     // Check if a request already exists to prevent spam
     const existing = await Enrollment.findOne({ studentId, teacherId, grade });
     if (existing) {
-      return res.status(400).json({ message: `You already have a ${existing.status} request for this class.` });
+      if (existing.status === 'declined') {
+        await Enrollment.deleteOne({ _id: existing._id });
+      } else {
+        return res.status(400).json({ message: `You already have a ${existing.status} request for this class.` });
+      }
     }
 
     const newEnrollment = new Enrollment({ studentId, teacherId, grade });
@@ -69,5 +73,24 @@ router.put('/approve/:enrollmentId', async (req, res) => {
     res.status(200).json({ message: 'Student successfully approved!', enrollment: updated });
   } catch (error) {
     res.status(500).json({ message: 'Failed to approve student' });
+  }
+});
+
+// 6. Decline a student's request
+router.put('/decline/:enrollmentId', async (req, res) => {
+  try {
+    const updated = await Enrollment.findByIdAndUpdate(
+      req.params.enrollmentId,
+      { status: 'declined' },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    res.status(200).json({ message: 'Student request declined.', enrollment: updated });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to decline student request' });
   }
 });
