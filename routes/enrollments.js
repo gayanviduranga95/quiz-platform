@@ -1,6 +1,7 @@
 const express = require('express');
 const Enrollment = require('../models/Enrollment');
 const User = require('../models/User');
+const { createNotificationForStudent } = require('../utils/pushNotifications');
 
 const router = express.Router();
 
@@ -48,8 +49,6 @@ router.get('/my-requests/:studentId', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch requests' });
   }
 });
-
-module.exports = router;
 // 4. Fetch all enrollment requests for a specific Teacher
 router.get('/teacher-requests/:teacherId', async (req, res) => {
   try {
@@ -70,6 +69,17 @@ router.put('/approve/:enrollmentId', async (req, res) => {
       { status: 'approved' }, 
       { new: true } // Returns the updated document
     );
+
+    if (updated) {
+      await createNotificationForStudent({
+        studentId: updated.studentId,
+        title: 'Enrollment approved',
+        message: `You can now access ${updated.grade} classes.`,
+        type: 'enrollment-approved',
+        link: ''
+      });
+    }
+
     res.status(200).json({ message: 'Student successfully approved!', enrollment: updated });
   } catch (error) {
     res.status(500).json({ message: 'Failed to approve student' });
@@ -89,8 +99,18 @@ router.put('/decline/:enrollmentId', async (req, res) => {
       return res.status(404).json({ message: 'Request not found' });
     }
 
+    await createNotificationForStudent({
+      studentId: updated.studentId,
+      title: 'Enrollment declined',
+      message: `Your request for ${updated.grade} was declined. You can request again later.`,
+      type: 'enrollment-declined',
+      link: ''
+    });
+
     res.status(200).json({ message: 'Student request declined.', enrollment: updated });
   } catch (error) {
     res.status(500).json({ message: 'Failed to decline student request' });
   }
 });
+
+module.exports = router;

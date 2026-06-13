@@ -1,5 +1,7 @@
 const express = require('express');
 const Quiz = require('../models/Quiz');
+const Enrollment = require('../models/Enrollment');
+const { createNotificationForStudent } = require('../utils/pushNotifications');
 const router = express.Router();
 
 // 1. Save a new quiz
@@ -8,6 +10,18 @@ router.post('/save', async (req, res) => {
     const { title, teacherId, grade, ageGroup, imageOnly, timeLimit, questions } = req.body;
     const newQuiz = new Quiz({ title, teacherId, grade, ageGroup, imageOnly, timeLimit, questions });
     await newQuiz.save();
+
+    const approvedEnrollments = await Enrollment.find({ teacherId, grade, status: 'approved' }).select('studentId');
+    await Promise.all(
+      approvedEnrollments.map((enrollment) => createNotificationForStudent({
+        studentId: enrollment.studentId,
+        title: 'New quiz available',
+        message: `${title} is now available for ${grade}.`,
+        type: 'quiz-published',
+        link: String(newQuiz._id)
+      }))
+    );
+
     res.status(201).json({ message: 'Quiz saved successfully!', quiz: newQuiz });
   } catch (error) {
     res.status(500).json({ message: 'Failed to save quiz' });

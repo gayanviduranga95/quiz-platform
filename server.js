@@ -4,6 +4,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
+let connectionPromise = null;
 
 // Debug: Show environment variables
 console.log('🔍 Environment Variables Check:');
@@ -36,9 +37,13 @@ app.use(express.urlencoded({ extended: true }));
 // ==========================================
 const connectDB = async () => {
   try {
-    // Check if already connected to prevent multiple connection attempts
-    if (mongoose.connection.readyState >= 1) {
+    if (mongoose.connection.readyState === 1) {
       console.log('✅ Already connected to MongoDB!');
+      return;
+    }
+
+    if (connectionPromise) {
+      await connectionPromise;
       return;
     }
 
@@ -48,7 +53,7 @@ const connectDB = async () => {
     }
 
     console.log('⏳ Connecting to MongoDB...');
-    await mongoose.connect(mongoUri, {
+    connectionPromise = mongoose.connect(mongoUri, {
       serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 75000,
       connectTimeoutMS: 30000,
@@ -59,8 +64,10 @@ const connectDB = async () => {
       bufferCommands: false,
       autoCreate: true,
     });
+    await connectionPromise;
     console.log('✅ Securely connected to MongoDB!');
   } catch (err) {
+    connectionPromise = null;
     console.error('❌ MongoDB connection error:', err.message);
     
     // Provide specific guidance based on error
@@ -134,6 +141,8 @@ app.use('/api/enrollments', require('./routes/enrollments'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/quizzes', require('./routes/quiz'));
 app.use('/api/scores', require('./routes/score'));
+app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/push', require('./routes/push'));
 
 // Global error handler
 app.use((err, req, res, next) => {
