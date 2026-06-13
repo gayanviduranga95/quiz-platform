@@ -21,7 +21,7 @@ console.log('');
 // MIDDLEWARE
 // ==========================================
 const corsOptions = {
-  origin: 'https://smartquiz-frontend.vercel.app', 
+  origin: process.env.CORS_ORIGIN || 'https://smartquiz-frontend.vercel.app', 
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 200
