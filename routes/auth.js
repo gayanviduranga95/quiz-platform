@@ -30,6 +30,9 @@ const getMailTransporter = () => {
 const hashResetToken = (token) =>
   crypto.createHash('sha256').update(token).digest('hex');
 
+const escapeRegex = (value) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // --- 1. Fetch All Teachers ---
 router.get('/teachers', async (req, res) => {
   try {
@@ -95,15 +98,19 @@ router.post('/register', upload.single('profilePic'), async (req, res) => {
 
 // Request a one-time password reset link.
 router.post('/forgot-password', async (req, res) => {
-  const genericMessage = 'If an account exists for that email, a password reset link has been sent.';
+  const genericMessage = 'If the username and email match an account, a password reset link has been sent.';
 
   try {
+    const username = req.body.username?.trim();
     const email = req.body.email?.trim().toLowerCase();
-    if (!email) {
-      return res.status(400).json({ message: 'Email is required' });
+    if (!username || !email) {
+      return res.status(400).json({ message: 'Username and email are required' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({
+      username,
+      email: { $regex: `^${escapeRegex(email)}$`, $options: 'i' }
+    });
     if (!user) {
       return res.status(200).json({ message: genericMessage });
     }
