@@ -1,11 +1,34 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const multer = require('multer');
+const nodemailer = require('nodemailer');
 const User = require('../models/User');
 
 // --- THESE TWO LINES FIX THE CRASH ---
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+const getMailTransporter = () => {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
+
+  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
+    throw new Error('SMTP email settings are incomplete');
+  }
+
+  return nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: Number(SMTP_PORT),
+    secure: Number(SMTP_PORT) === 465,
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS
+    }
+  });
+};
+
+const hashResetToken = (token) =>
+  crypto.createHash('sha256').update(token).digest('hex');
 
 // --- 1. Fetch All Teachers ---
 router.get('/teachers', async (req, res) => {
@@ -45,7 +68,7 @@ router.post('/register', upload.single('profilePic'), async (req, res) => {
       password: hashedPassword,
       role,
       fullName,
-      email,
+      email: email?.trim().toLowerCase(),
       phone,
       district,
       profilePic: profilePicBase64,
@@ -67,6 +90,92 @@ router.post('/register', upload.single('profilePic'), async (req, res) => {
       name: error.name
     });
     res.status(500).json({ message: 'Server error during registration', error: error.message });
+  }
+});
+
+// Request a one-time password reset link.
+router.post('/forgot-password', async (req, res) => {
+  const genericMessage = 'If an account exists for that email, a password reset link has been sent.';
+
+  try {
+    const email = req.body.email?.trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(200).json({ message: genericMessage });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.passwordResetToken = hashResetToken(resetToken);
+    user.passwordResetExpires = Date.now() + 15 * 60 * 1000;
+    await user.save();
+
+    const frontendUrl = (process.env.FRONTEND_URL || 'https://smartquiz-frontend.vercel.app').replace(/\/$/, '');
+    const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
+    const transporter = getMailTransporter();
+
+    try {
+      await transporter.sendMail({
+        from: process.env.EMAIL_FROM || process.env.SMTP_USER,
+        to: user.email,
+        subject: 'Reset your SmartQuiz password',
+        text: `Reset your SmartQuiz password using this link: ${resetUrl}\n\nThis link expires in 15 minutes. If you did not request this, you can ignore this email.`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#0f172a">
+            <h2 style="color:#0d9488">Reset your SmartQuiz password</h2>
+            <p>We received a request to reset the password for your account.</p>
+            <p>
+              <a href="${resetUrl}" style="display:inline-block;background:#0d9488;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">
+                Reset password
+              </a>
+            </p>
+            <p>This link expires in 15 minutes. If you did not request it, you can ignore this email.</p>
+          </div>
+        `
+      });
+    } catch (mailError) {
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save();
+      throw mailError;
+    }
+
+    return res.status(200).json({ message: genericMessage });
+  } catch (error) {
+    console.error('Forgot Password Error:', error.message);
+    return res.status(500).json({ message: 'Unable to send a reset email right now. Please try again later.' });
+  }
+});
+
+// Replace the password when a valid, unexpired token is supplied.
+router.post('/reset-password/:token', async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+    }
+
+    const user = await User.findOne({
+      passwordResetToken: hashResetToken(req.params.token),
+      passwordResetExpires: { $gt: Date.now() }
+    }).select('+passwordResetToken +passwordResetExpires');
+
+    if (!user) {
+      return res.status(400).json({ message: 'This reset link is invalid or has expired' });
+    }
+
+    user.password = await bcrypt.hash(password, 10);
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
+
+    return res.status(200).json({ message: 'Password reset successful. You can now log in.' });
+  } catch (error) {
+    console.error('Reset Password Error:', error.message);
+    return res.status(500).json({ message: 'Unable to reset the password right now. Please try again later.' });
   }
 });
 

@@ -5,10 +5,12 @@ const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, required: true, enum: ['teacher', 'student'] },
+  passwordResetToken: { type: String, select: false },
+  passwordResetExpires: { type: Date, select: false },
   
   // Shared Profile Data
   fullName: { type: String },
-  email: { type: String },
+  email: { type: String, trim: true, lowercase: true },
   phone: { type: String }, // Useful for WhatsApp/Contact
   district: { type: String }, // e.g., Galle, Kurunegala, Colombo
   
