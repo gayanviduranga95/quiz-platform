@@ -5,8 +5,8 @@ const router = express.Router();
 // 1. Save a new quiz
 router.post('/save', async (req, res) => {
   try {
-    const { title, teacherId, grade, timeLimit, questions } = req.body;
-    const newQuiz = new Quiz({ title, teacherId, grade, timeLimit, questions });
+    const { title, teacherId, grade, ageGroup, imageOnly, timeLimit, questions } = req.body;
+    const newQuiz = new Quiz({ title, teacherId, grade, ageGroup, imageOnly, timeLimit, questions });
     await newQuiz.save();
     res.status(201).json({ message: 'Quiz saved successfully!', quiz: newQuiz });
   } catch (error) {
@@ -38,10 +38,10 @@ router.get('/teacher/:teacherId', async (req, res) => {
 // 4. Update/Edit an existing Quiz
 router.put('/:id', async (req, res) => {
   try {
-    const { title, grade, timeLimit, questions } = req.body;
+    const { title, grade, ageGroup, imageOnly, timeLimit, questions } = req.body;
     const updatedQuiz = await Quiz.findByIdAndUpdate(
       req.params.id,
-      { title, grade, timeLimit, questions },
+      { title, grade, ageGroup, imageOnly, timeLimit, questions },
       { new: true }
     );
     res.status(200).json({ message: 'Quiz updated successfully!', quiz: updatedQuiz });
