@@ -7,10 +7,16 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Initialize Gemini (Ensure your .env file has GEMINI_API_KEY)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+if (!process.env.GEMINI_API_KEY) {
+  console.error('❌ CRITICAL: GEMINI_API_KEY is not set in environment variables!');
+}
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'MISSING_KEY');
 
 router.post('/generate', upload.single('media'), async (req, res) => {
   try {
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ message: 'AI service is not configured (missing API key)' });
+    }
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
     // Grab requested question count or default to 5
@@ -30,7 +36,9 @@ router.post('/generate', upload.single('media'), async (req, res) => {
     const promptText = `You are an expert teacher creating a quiz for students aged ${ageGroup}. Based on the attached ${isImage ? 'image' : 'document'}, generate exactly ${numQuestions} multiple-choice questions.
     Keep the language, examples, and difficulty appropriate for this age group. Make the quiz feel engaging and student-friendly, not dry or overly academic.
     ${imageOnly ? 'Make the quiz image-led: keep questionText very short or empty when the image itself is the main prompt.' : 'Use clear question text as the main prompt.'}
-    Return ONLY valid JSON, with an array of objects using the exact keys: "questionText", "options" (array of 4 strings), "correctAnswer" (must match one option exactly), "hint" (short clue), and "explanation" (one short sentence explaining the answer).`;
+    Return ONLY valid JSON. The output must be a single JSON array of objects.
+    Each object MUST have these keys: "questionText", "options" (array of 4 strings), "correctAnswer" (must match one option exactly), "hint" (short clue), and "explanation" (one short sentence explaining the answer).
+    Do NOT include any introductory or concluding text, only the raw JSON array.`;
 
     // Using Gemini 1.5 Flash
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
@@ -39,15 +47,27 @@ router.post('/generate', upload.single('media'), async (req, res) => {
     const result = await model.generateContent([promptText, mediaPart]);
     let responseText = result.response.text();
     
-    // Clean formatting if Gemini wraps in markdown
-    responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    // Robust JSON extraction: find the first '[' and last ']'
+    const startIdx = responseText.indexOf('[');
+    const endIdx = responseText.lastIndexOf(']');
     
-    const questions = JSON.parse(responseText);
+    if (startIdx === -1 || endIdx === -1) {
+      console.error('Invalid AI Response Format:', responseText);
+      throw new Error('AI returned an invalid response format');
+    }
+    
+    const cleanJson = responseText.substring(startIdx, endIdx + 1);
+    const questions = JSON.parse(cleanJson);
+    
     res.status(200).json(questions);
 
   } catch (error) {
     console.error('AI Generation Error:', error);
-    res.status(500).json({ message: 'Failed to generate questions' });
+    res.status(500).json({ 
+      message: 'Failed to generate questions', 
+      error: error.message,
+      details: 'Check if the API key is valid and the file content is readable by AI.'
+    });
   }
 });
 
