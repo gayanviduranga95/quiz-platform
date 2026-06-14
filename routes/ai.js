@@ -1,18 +1,25 @@
 const express = require('express');
 const multer = require('multer');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const Ai = require('../models/Ai');
+const Ai = require('../models/Ai'); // Make sure this path points to your updated Mongoose schema
 
 const router = express.Router();
-// Save the file in temporary memory, avoiding Vercel's read-only hard drive
-const upload = multer({ storage: multer.memoryStorage() });
 
-// Initialize Gemini (Ensure your .env file has GEMINI_API_KEY)
+// SECURITY UPGRADE: Limit uploads to 10MB to prevent memory exhaustion (DoS attacks)
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } 
+});
+
+// Initialize Gemini
 if (!process.env.GEMINI_API_KEY) {
   console.error('❌ CRITICAL: GEMINI_API_KEY is not set in environment variables!');
 }
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'MISSING_KEY');
 
+// ==========================================
+// 1. GENERATE QUIZ ROUTE
+// ==========================================
 router.post('/generate', upload.single('media'), async (req, res) => {
   try {
     if (!process.env.GEMINI_API_KEY) {
@@ -51,9 +58,9 @@ router.post('/generate', upload.single('media'), async (req, res) => {
     "hint": string,
     "explanation": string.
     
-    IMPORTANT: Return ONLY the JSON array. Do not include markdown code blocks or text.`;
+    IMPORTANT: Return ONLY the valid JSON array. Do not include markdown code blocks, backticks, or conversational text.`;
 
-    // Using Gemini 2.5 Flash with optimized settings
+    // FIX APPLIED: Using the active gemini-2.5-flash model
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.5-flash',
     });
@@ -73,14 +80,14 @@ router.post('/generate', upload.single('media'), async (req, res) => {
     const response = await result.response;
     const responseText = response.text();
     console.log('--- Raw AI Response Received ---');
-    console.log(responseText.substring(0, 100) + '...'); // Log start of response for safety
+    console.log(responseText.substring(0, 100) + '...'); 
     
     let questions;
     try {
       questions = JSON.parse(responseText);
     } catch (parseError) {
-      console.error('JSON Parse Error:', parseError.message);
-      // Robust fallback extraction
+      console.error('JSON Parse Error, attempting fallback extraction:', parseError.message);
+      // Robust fallback extraction: finds the first '[' and last ']'
       const startIdx = responseText.indexOf('[');
       const endIdx = responseText.lastIndexOf(']');
       if (startIdx !== -1 && endIdx !== -1) {
@@ -90,36 +97,39 @@ router.post('/generate', upload.single('media'), async (req, res) => {
       }
     }
     
+    // Send successful response to frontend
     res.status(200).json(questions);
 
-    // Async logging
+    // Async logging to database (doesn't block the response)
     Ai.create({
-      teacherId: req.body.teacherId,
+      teacherId: req.body.teacherId || null,
       prompt: promptText,
       result: questions,
       status: 'success'
-    }).catch(err => console.error('AI Log Error:', err));
+    }).catch(err => console.error('Database Logging Error:', err));
 
   } catch (error) {
     console.error('AI Generation Error:', error);
 
     // Async logging for error
     Ai.create({
-      teacherId: req.body.teacherId,
+      teacherId: req.body.teacherId || null,
       prompt: `Questions: ${req.body.numQuestions || 5}, Age: ${req.body.ageGroup || '11-13'}`,
       status: 'error',
       errorMessage: error.message
-    }).catch(err => console.error('AI Log Error:', err));
+    }).catch(err => console.error('Database Logging Error:', err));
 
     res.status(500).json({ 
       message: 'Failed to generate questions', 
       error: error.message,
-      details: 'Check if the API key is valid and the file content is readable by AI.'
+      details: 'Check if the file content is readable by AI.'
     });
   }
 });
 
-// New route for AI Explanation (Explain like I'm 5)
+// ==========================================
+// 2. EXPLAIN ANSWER ROUTE (Explain like I'm 5)
+// ==========================================
 router.post('/explain', async (req, res) => {
   try {
     const { question, answer, context } = req.body;
@@ -127,8 +137,9 @@ router.post('/explain', async (req, res) => {
       return res.status(400).json({ message: 'Missing question or answer' });
     }
 
+    // FIX APPLIED: Using the active gemini-2.5-flash model
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const prompt = `You are a friendly teacher. Explain the following concept to a 5-year-old child. 
+    const prompt = `You are a friendly teacher. Explain the following concept to a child. 
     Question: "${question}"
     Correct Answer: "${answer}"
     ${context ? `Additional Context: "${context}"` : ''}
