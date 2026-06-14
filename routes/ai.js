@@ -51,4 +51,29 @@ router.post('/generate', upload.single('media'), async (req, res) => {
   }
 });
 
+// New route for AI Explanation (Explain like I'm 5)
+router.post('/explain', async (req, res) => {
+  try {
+    const { question, answer, context } = req.body;
+    if (!question || !answer) {
+      return res.status(400).json({ message: 'Missing question or answer' });
+    }
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const prompt = `You are a friendly teacher. Explain the following concept to a 5-year-old child. 
+    Question: "${question}"
+    Correct Answer: "${answer}"
+    ${context ? `Additional Context: "${context}"` : ''}
+    Keep it very simple, fun, and use an analogy if possible. Maximum 2-3 sentences.`;
+
+    const result = await model.generateContent(prompt);
+    const explanation = result.response.text().trim();
+    
+    res.status(200).json({ explanation });
+  } catch (error) {
+    console.error('AI Explanation Error:', error);
+    res.status(500).json({ message: 'Failed to generate simplified explanation' });
+  }
+});
+
 module.exports = router;
