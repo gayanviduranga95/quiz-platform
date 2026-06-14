@@ -44,8 +44,11 @@ router.post('/generate', upload.single('media'), async (req, res) => {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     
     // Send BOTH the text prompt and the PDF file directly to Gemini
+    console.log('--- Calling Gemini API ---');
     const result = await model.generateContent([promptText, mediaPart]);
     let responseText = result.response.text();
+    console.log('--- Raw AI Response ---');
+    console.log(responseText);
     
     // Robust JSON extraction: find the first '[' and last ']'
     const startIdx = responseText.indexOf('[');
