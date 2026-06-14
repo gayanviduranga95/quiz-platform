@@ -8,23 +8,38 @@ const router = express.Router();
 router.post('/save', async (req, res) => {
   try {
     const { title, teacherId, grade, ageGroup, imageOnly, timeLimit, questions } = req.body;
+    
+    if (!title || !teacherId || !questions || questions.length === 0) {
+      return res.status(400).json({ message: 'Missing required quiz data' });
+    }
+
     const newQuiz = new Quiz({ title, teacherId, grade, ageGroup, imageOnly, timeLimit, questions });
     await newQuiz.save();
 
-    const approvedEnrollments = await Enrollment.find({ teacherId, grade, status: 'approved' }).select('studentId');
-    await Promise.all(
-      approvedEnrollments.map((enrollment) => createNotificationForStudent({
-        studentId: enrollment.studentId,
-        title: 'New quiz available',
-        message: `${title} is now available for ${grade}.`,
-        type: 'quiz-published',
-        link: String(newQuiz._id)
-      }))
-    );
+    // Notify students (non-blocking / error-resilient)
+    try {
+      const approvedEnrollments = await Enrollment.find({ teacherId, grade, status: 'approved' }).select('studentId');
+      if (approvedEnrollments.length > 0) {
+        // We use allSettled or just a simple map without await to keep it non-blocking for the teacher
+        Promise.allSettled(
+          approvedEnrollments.map((enrollment) => createNotificationForStudent({
+            studentId: enrollment.studentId,
+            title: 'New quiz available',
+            message: `${title} is now available for ${grade}.`,
+            type: 'quiz-published',
+            link: String(newQuiz._id)
+          }))
+        ).catch(err => console.error('Notification Batch Error:', err));
+      }
+    } catch (notifError) {
+      console.error('Error fetching enrollments for notification:', notifError);
+      // We don't fail the request here because the quiz is already saved
+    }
 
     res.status(201).json({ message: 'Quiz saved successfully!', quiz: newQuiz });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to save quiz' });
+    console.error('Quiz Save Error:', error);
+    res.status(500).json({ message: 'Failed to save quiz', error: error.message });
   }
 });
 

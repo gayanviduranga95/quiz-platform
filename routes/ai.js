@@ -32,8 +32,8 @@ router.post('/generate', upload.single('media'), async (req, res) => {
     ${imageOnly ? 'Make the quiz image-led: keep questionText very short or empty when the image itself is the main prompt.' : 'Use clear question text as the main prompt.'}
     Return ONLY valid JSON, with an array of objects using the exact keys: "questionText", "options" (array of 4 strings), "correctAnswer" (must match one option exactly), "hint" (short clue), and "explanation" (one short sentence explaining the answer).`;
 
-    // Using Gemini 2.5 Flash
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    // Using Gemini 1.5 Flash
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     
     // Send BOTH the text prompt and the PDF file directly to Gemini
     const result = await model.generateContent([promptText, mediaPart]);
