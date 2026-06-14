@@ -25,51 +25,67 @@ router.post('/generate', upload.single('media'), async (req, res) => {
     const imageOnly = req.body.imageOnly === 'true' || req.body.imageOnly === true;
     const isImage = req.file.mimetype.startsWith('image/');
 
+    // Normalize mime type for Gemini
+    let mimeType = req.file.mimetype;
+    if (isImage) {
+      if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
+    } else if (mimeType.includes('pdf')) {
+      mimeType = 'application/pdf';
+    }
+
     // Convert the uploaded media directly into a format Gemini can read
     const mediaPart = {
       inlineData: {
         data: req.file.buffer.toString("base64"),
-        mimeType: req.file.mimetype || (isImage ? 'image/png' : 'application/pdf')
+        mimeType: mimeType
       }
     };
 
-    const promptText = `You are an expert teacher creating a quiz for students aged ${ageGroup}. Based on the attached ${isImage ? 'image' : 'document'}, generate exactly ${numQuestions} multiple-choice questions.
-    Keep the language, examples, and difficulty appropriate for this age group.
-    ${imageOnly ? 'Make the quiz image-led: keep questionText very short or empty when the image itself is the main prompt.' : 'Use clear question text as the main prompt.'}
+    const promptText = `You are an expert teacher creating a quiz for students aged ${ageGroup}. Based on the provided ${isImage ? 'image' : 'document'}, generate exactly ${numQuestions} multiple-choice questions.
     
     Return a JSON array of objects. Each object MUST have:
     "questionText": string,
     "options": array of 4 strings,
     "correctAnswer": string (must match one option exactly),
     "hint": string,
-    "explanation": string.`;
+    "explanation": string.
+    
+    IMPORTANT: Return ONLY the JSON array. Do not include markdown code blocks or text.`;
 
-    // Using Gemini 1.5 Flash with JSON output mode
+    // Using Gemini 1.5 Flash with optimized settings
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-1.5-flash',
-      generationConfig: {
-        responseMimeType: "application/json",
-      }
     });
     
-    console.log('--- Calling Gemini API (JSON Mode) ---');
-    const result = await model.generateContent([promptText, mediaPart]);
-    const responseText = result.response.text();
-    console.log('--- Raw AI Response ---');
-    console.log(responseText);
+    console.log(`--- Calling Gemini API (File: ${req.file.originalname}, Size: ${req.file.size} bytes, Mime: ${mimeType}) ---`);
+    
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [mediaPart, { text: promptText }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.7,
+        topP: 0.8,
+        topK: 40,
+      }
+    });
+
+    const response = await result.response;
+    const responseText = response.text();
+    console.log('--- Raw AI Response Received ---');
+    console.log(responseText.substring(0, 100) + '...'); // Log start of response for safety
     
     let questions;
     try {
       questions = JSON.parse(responseText);
     } catch (parseError) {
-      console.error('JSON Parse Error, attempting fallback extraction:', parseError);
-      // Fallback extraction
+      console.error('JSON Parse Error:', parseError.message);
+      // Robust fallback extraction
       const startIdx = responseText.indexOf('[');
       const endIdx = responseText.lastIndexOf(']');
       if (startIdx !== -1 && endIdx !== -1) {
         questions = JSON.parse(responseText.substring(startIdx, endIdx + 1));
       } else {
-        throw new Error('AI response could not be parsed as JSON');
+        throw new Error('AI response was not valid JSON and could not be extracted.');
       }
     }
     
