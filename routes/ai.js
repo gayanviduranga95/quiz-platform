@@ -52,9 +52,9 @@ router.post('/generate', upload.single('media'), async (req, res) => {
     
     IMPORTANT: Return ONLY the JSON array. Do not include markdown code blocks or text.`;
 
-    // Using Gemini 1.5 Flash with optimized settings
+    // Using Gemini Flash Latest with optimized settings
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
+      model: 'gemini-flash-latest',
     });
     
     console.log(`--- Calling Gemini API (File: ${req.file.originalname}, Size: ${req.file.size} bytes, Mime: ${mimeType}) ---`);
@@ -109,7 +109,7 @@ router.post('/explain', async (req, res) => {
       return res.status(400).json({ message: 'Missing question or answer' });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
     const prompt = `You are a friendly teacher. Explain the following concept to a 5-year-old child. 
     Question: "${question}"
     Correct Answer: "${answer}"

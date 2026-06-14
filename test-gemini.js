@@ -10,8 +10,8 @@ async function testGeminiAPI() {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     console.log('🤖 GoogleGenerativeAI initialized');
     
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.0-pro' });
-    console.log('📦 Model loaded: gemini-1.0-pro');
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+    console.log('📦 Model loaded: gemini-flash-latest');
     
     console.log('📤 Sending test prompt to Gemini...');
     const result = await model.generateContent('What is 2 + 2? Answer in one word only.');
