@@ -34,33 +34,44 @@ router.post('/generate', upload.single('media'), async (req, res) => {
     };
 
     const promptText = `You are an expert teacher creating a quiz for students aged ${ageGroup}. Based on the attached ${isImage ? 'image' : 'document'}, generate exactly ${numQuestions} multiple-choice questions.
-    Keep the language, examples, and difficulty appropriate for this age group. Make the quiz feel engaging and student-friendly, not dry or overly academic.
+    Keep the language, examples, and difficulty appropriate for this age group.
     ${imageOnly ? 'Make the quiz image-led: keep questionText very short or empty when the image itself is the main prompt.' : 'Use clear question text as the main prompt.'}
-    Return ONLY valid JSON. The output must be a single JSON array of objects.
-    Each object MUST have these keys: "questionText", "options" (array of 4 strings), "correctAnswer" (must match one option exactly), "hint" (short clue), and "explanation" (one short sentence explaining the answer).
-    Do NOT include any introductory or concluding text, only the raw JSON array.`;
-
-    // Using Gemini 1.5 Flash
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     
-    // Send BOTH the text prompt and the PDF file directly to Gemini
-    console.log('--- Calling Gemini API ---');
+    Return a JSON array of objects. Each object MUST have:
+    "questionText": string,
+    "options": array of 4 strings,
+    "correctAnswer": string (must match one option exactly),
+    "hint": string,
+    "explanation": string.`;
+
+    // Using Gemini 1.5 Flash with JSON output mode
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-1.5-flash',
+      generationConfig: {
+        responseMimeType: "application/json",
+      }
+    });
+    
+    console.log('--- Calling Gemini API (JSON Mode) ---');
     const result = await model.generateContent([promptText, mediaPart]);
-    let responseText = result.response.text();
+    const responseText = result.response.text();
     console.log('--- Raw AI Response ---');
     console.log(responseText);
     
-    // Robust JSON extraction: find the first '[' and last ']'
-    const startIdx = responseText.indexOf('[');
-    const endIdx = responseText.lastIndexOf(']');
-    
-    if (startIdx === -1 || endIdx === -1) {
-      console.error('Invalid AI Response Format:', responseText);
-      throw new Error('AI returned an invalid response format');
+    let questions;
+    try {
+      questions = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('JSON Parse Error, attempting fallback extraction:', parseError);
+      // Fallback extraction
+      const startIdx = responseText.indexOf('[');
+      const endIdx = responseText.lastIndexOf(']');
+      if (startIdx !== -1 && endIdx !== -1) {
+        questions = JSON.parse(responseText.substring(startIdx, endIdx + 1));
+      } else {
+        throw new Error('AI response could not be parsed as JSON');
+      }
     }
-    
-    const cleanJson = responseText.substring(startIdx, endIdx + 1);
-    const questions = JSON.parse(cleanJson);
     
     res.status(200).json(questions);
 
