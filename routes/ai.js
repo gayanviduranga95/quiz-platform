@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Ai = require('../models/Ai');
 
 const router = express.Router();
 // Save the file in temporary memory, avoiding Vercel's read-only hard drive
@@ -91,8 +92,25 @@ router.post('/generate', upload.single('media'), async (req, res) => {
     
     res.status(200).json(questions);
 
+    // Async logging
+    Ai.create({
+      teacherId: req.body.teacherId,
+      prompt: promptText,
+      result: questions,
+      status: 'success'
+    }).catch(err => console.error('AI Log Error:', err));
+
   } catch (error) {
     console.error('AI Generation Error:', error);
+
+    // Async logging for error
+    Ai.create({
+      teacherId: req.body.teacherId,
+      prompt: `Questions: ${req.body.numQuestions || 5}, Age: ${req.body.ageGroup || '11-13'}`,
+      status: 'error',
+      errorMessage: error.message
+    }).catch(err => console.error('AI Log Error:', err));
+
     res.status(500).json({ 
       message: 'Failed to generate questions', 
       error: error.message,
